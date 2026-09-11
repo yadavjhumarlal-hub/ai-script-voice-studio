@@ -104,12 +104,12 @@ if st.button("🚀 Generate Audio (MP3)"):
                         final_rate = f"{base_rate + speed_adjust:+d}%"
                         asyncio.run(generate_edge(text_input, code, final_rate, default_pitch, output_audio))
 
-                # 2. Google Gemini इंजन (अपडेटेड मॉडल: gemini-2.0-flash)
+                # 2. Google Gemini इंजन (लेटेस्ट मॉडल: gemini-3.6-flash)
                 elif engine_choice.startswith("✨"):
                     client = genai.Client(api_key=api_key)
                     prompt = f"इस टेक्स्ट को {gemini_tone} के अंदाज़ में वॉइस-ओवर के लिए सबसे बेहतरीन और नेचुरल फ्लो में सुधारें: {text_input}"
                     response = client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt
                     )
                     polished_text = response.text
@@ -155,3 +155,4 @@ if st.button("🚀 Generate Audio (MP3)"):
                     )
             except Exception as e:
                 st.error(f"त्रुटि: {e}")
+    
