@@ -3,114 +3,134 @@ import edge_tts
 import asyncio
 from gtts import gTTS
 import requests
+from google import genai
 import os
 
 st.set_page_config(page_title="Universal AI Voice Studio", page_icon="🎙️", layout="centered")
 
 st.title("🎙️ Universal AI Voice Studio")
-st.write("फ्री अनलिमिटेड न्यूरल आवाज़ें + ElevenLabs प्रीमियम कैरेक्टर एक ही जगह।")
+st.write("फ्री अनलिमिटेड न्यूरल आवाज़ें (हिंदी, ओड़िया, इंग्लिश) + Gemini AI + ElevenLabs")
 
 # साइडबार - इंजन चयन
-st.sidebar.header("⚙️ वॉयस इंजन चुनें")
+st.sidebar.header("⚙️ Engine & Voice Settings")
 engine_choice = st.sidebar.radio(
-    "इंजन का प्रकार:",
-    ("🆓 100% Free & Unlimited (Edge/Google)", "💎 ElevenLabs Premium Characters")
+    "वॉयस इंजन चुनें:",
+    (
+        "🆓 100% Free & Unlimited (Edge/Google)",
+        "✨ Google Gemini Engine (Free API Key)",
+        "💎 ElevenLabs Characters (API Key)"
+    )
 )
 
-# 1. फ्री वॉयस लिस्ट (हिंदी, ओड़िया, इंग्लिश + स्पेशल कैरेक्टर प्रीसेट्स)
+# 1. फ्री आवाज़ों की प्रमाणित लिस्ट (100% वर्किंग)
 free_voices = {
     # 🇮🇳 हिंदी आवाज़ें
-    "Hindi - Madhur (गंभीर कहानी / YouTube Male)": ("edge", "hi-IN-MadhurNeural", "0%", "0Hz"),
-    "Hindi - Swara (स्पष्ट समाचार / Female)": ("edge", "hi-IN-SwaraNeural", "0%", "0Hz"),
-    "Hindi - Prabhat (यूट्यूब व रील्स / Male)": ("edge", "en-IN-PrabhatNeural", "0%", "0Hz"),
-    "Hindi - Neerja (नेचुरल व मधुर / Female)": ("edge", "en-IN-NeerjaNeural", "0%", "0Hz"),
-    "Hindi - Gul (गहरी व शांत / Female)": ("edge", "ur-PK-GulNeural", "0%", "0Hz"),
-    "Hindi - Asad (भारी व डॉक्यूमेंट्री / Male)": ("edge", "ur-PK-AsadNeural", "0%", "0Hz"),
+    "1. Hindi - Madhur (गंभीर पुरुष / कहानी व यूट्यूब)": ("edge", "hi-IN-MadhurNeural"),
+    "2. Hindi - Swara (स्पष्ट महिला / समाचार व व्याख्या)": ("edge", "hi-IN-SwaraNeural"),
+    "3. Hindi - Prabhat (यूट्यूब व रील्स / पुरुष)": ("edge", "en-IN-PrabhatNeural"),
+    "4. Hindi - Neerja (नेचुरल व मधुर / महिला)": ("edge", "en-IN-NeerjaNeural"),
+    "5. Hindi - Gul (गहरी व शांत / महिला)": ("edge", "ur-PK-GulNeural"),
+    "6. Hindi - Asad (भारी व डॉक्यूमेंट्री / पुरुष)": ("edge", "ur-PK-AsadNeural"),
     
-    # 🎭 स्पेशल कैरेक्टर प्रीसेट्स (फ्री में अलग-अलग रोल)
-    "Character - Kid / Cartoon (बच्चा / कार्टून)": ("edge", "hi-IN-SwaraNeural", "+10%", "+18Hz"),
-    "Character - Deep Villain / Monster (भारी दानव / विलेन)": ("edge", "hi-IN-MadhurNeural", "-10%", "-18Hz"),
-    "Character - Old Storyteller (बुज़ुर्ग कहानीकार)": ("edge", "hi-IN-MadhurNeural", "-15%", "-4Hz"),
-    "Character - Energetic RJ (रेडियो जॉकी)": ("edge", "en-IN-PrabhatNeural", "+15%", "+4Hz"),
+    # 🇮🇳 ओड़िया आवाज़ें (gTTS Engine)
+    "7. Odia - Female 1 (ଓଡ଼ିଆ ମହିଳା - ସ୍ପଷ୍ଟ)": ("gtts", "or"),
+    "8. Odia - Female 2 (ଓଡ଼ିଆ ମହିଳା - ଧୀର/କାହାଣୀ)": ("gtts_slow", "or"),
     
-    # 🇮🇳 ओड़िया (100% वर्किंग)
-    "Odia - Female 1 (ଓଡ଼ିଆ ମହିଳା - ସ୍ପଷ୍ଟ)": ("gtts", "or", "0%", "0Hz"),
-    "Odia - Female 2 (ଓଡ଼ିଆ ମହିଳା - ଧୀର/କାହାଣୀ)": ("gtts_slow", "or", "0%", "0Hz"),
-    
-    # 🌍 इंग्लिश
-    "English - Guy (US Male Narration)": ("edge", "en-US-GuyNeural", "0%", "0Hz"),
-    "English - Jenny (US Warm Female)": ("edge", "en-US-JennyNeural", "0%", "0Hz")
+    # 🌍 इंग्लिश आवाज़ें
+    "9. English - Guy (US Narration Male)": ("edge", "en-US-GuyNeural"),
+    "10. English - Jenny (US Professional Female)": ("edge", "en-US-JennyNeural")
 }
 
-# 2. ElevenLabs प्रीमियम कैरेक्टर लिस्ट
+# 2. ElevenLabs आवाज़ें
 elevenlabs_voices = {
-    "Adam (डीप नरेशन व कहानी)": "pNInz6obpgDQGcFmaJgB",
-    "Rachel (शांत व प्रोफेशनल फीमेल)": "21m00Tcm4TlvDq8ikWAM",
-    "Antoni (उत्साही मेल कैरेक्टर)": "ErXwobaYiN019PkySvjV",
-    "Bella (सॉफ्ट व इमोशनल फीमेल)": "EXAVITQu4vr4xnSDxMaL",
-    "Josh (पॉडकास्ट व भारी आवाज)": "TxGEqnHWrfWFTfGW9XjX",
-    "Matilda (वार्म स्टोरीटेलर)": "XrExE9yKIg1WjnnlVkGX",
-    "Arnold (क्रिस्प व भारी एक्शन आवाज)": "VR6AewLTigWG4xSOukaG",
-    "Charlie (कैजुअल मेल बातचीत)": "IKne3meq5aSn9XLyUdCD",
-    "Callum (इंटेंस ड्रामा कैरेक्टर)": "N2lVS1w4EtoT3dr4eOWO",
-    "Liam (यंग मेल)": "TX3LPaxmHKxFdv7VOQHJ"
+    "Adam (डीप नरेशन / मेल)": "pNInz6obpgDQGcFmaJgB",
+    "Rachel (प्रोफेशनल / फीमेल)": "21m00Tcm4TlvDq8ikWAM",
+    "Antoni (उत्साही / मेल)": "ErXwobaYiN019PkySvjV",
+    "Bella (सॉफ्ट / फीमेल)": "EXAVITQu4vr4xnSDxMaL",
+    "Josh (पॉडकास्ट / भारी मेल)": "TxGEqnHWrfWFTfGW9XjX",
+    "Matilda (स्टोरीटेलिंग / फीमेल)": "XrExE9yKIg1WjnnlVkGX"
 }
 
-# UI रेंडरिंग
-if engine_choice == "🆓 100% Free & Unlimited (Edge/Google)":
-    selected_voice = st.sidebar.selectbox("फ्री आवाज़ चुनें:", list(free_voices.keys()))
-    speed_slider = st.sidebar.slider("स्पीड एडजस्ट करें (%):", -50, 50, 0, step=5)
-    api_key = None
-else:
-    api_key = st.sidebar.text_input("ElevenLabs API Key डालें:", type="password", help="elevenlabs.io से अपनी API Key लें")
-    selected_voice = st.sidebar.selectbox("ElevenLabs कैरेक्टर चुनें:", list(elevenlabs_voices.keys()))
-    speed_slider = 0
+# UI कंट्रोल्स
+speed_val = 0
+api_key = ""
 
-# टेक्स्ट इनपुट एरिया
+if engine_choice.startswith("🆓"):
+    selected_voice = st.sidebar.selectbox("आवाज़ चुनें:", list(free_voices.keys()))
+    speed_val = st.sidebar.slider("बोलने की गति (Speed %):", -50, 50, 0, step=5)
+elif engine_choice.startswith("✨"):
+    api_key = st.sidebar.text_input("Google Gemini API Key डालें:", type="password", help="aistudio.google.com से लें")
+    gemini_tone = st.sidebar.selectbox("Gemini का अंदाज़ (Tone):", ["Storyteller (कहानीकार)", "Excited / Energetic (रोमांचक)", "Calm & Professional (शांत/गंभीर)"])
+    selected_voice = st.sidebar.selectbox("आउटपुट आवाज़:", ["Hindi - Madhur (Male)", "Hindi - Swara (Female)", "Odia - Female (ଓଡ଼ିଆ)"])
+else:
+    api_key = st.sidebar.text_input("ElevenLabs API Key डालें:", type="password", help="elevenlabs.io से लें")
+    selected_voice = st.sidebar.selectbox("ElevenLabs कैरेक्टर चुनें:", list(elevenlabs_voices.keys()))
+
+# टेक्स्ट इनपुट
 text_input = st.text_area(
     "यहाँ अपना टेक्स्ट लिखें या पेस्ट करें (हिंदी / ଓଡ଼ିଆ / English):",
-    height=220,
-    placeholder="यहाँ टेक्स्ट दर्ज करें जिसे ऑडियो में बदलना है..."
+    height=200,
+    placeholder="यहाँ टेक्स्ट दर्ज करें जिसे आप AI आवाज़ में बदलना चाहते हैं..."
 )
 
-# Edge TTS फंक्शन
-async def generate_edge(text, voice_code, rate_str, pitch_str, output_file):
-    communicate = edge_tts.Communicate(text, voice_code, rate=rate_str, pitch=pitch_str)
+# Edge TTS फंक्शन (बिना किसी Pitch Conflict के)
+async def generate_edge_speech(text, voice_code, rate_str, output_file):
+    communicate = edge_tts.Communicate(text, voice_code, rate=rate_str)
     await communicate.save(output_file)
 
 if st.button("🚀 Generate Audio (MP3)"):
     if not text_input.strip():
         st.error("कृपया पहले कोई टेक्स्ट लिखें।")
-    elif engine_choice.startswith("💎") and not api_key:
-        st.error("कृपया साइडबार में अपनी ElevenLabs API Key दर्ज करें।")
+    elif (engine_choice.startswith("✨") or engine_choice.startswith("💎")) and not api_key.strip():
+        st.error("कृपया साइडबार में अपनी API Key दर्ज करें।")
     else:
         with st.spinner("AI आवाज़ तैयार की जा रही है..."):
-            output_audio = "final_voice.mp3"
+            output_audio = "final_output.mp3"
+            
+            # पुरानी ऑडियो फ़ाइल हटाना ताकि कोई कैश एरर न आए
+            if os.path.exists(output_audio):
+                os.remove(output_audio)
+                
             try:
-                # 1. फ्री इंजन लॉजिक
+                # 1. फ्री और अनलिमिटेड इंजन
                 if engine_choice.startswith("🆓"):
-                    engine_type, voice_code, default_rate, default_pitch = free_voices[selected_voice]
+                    eng_type, code = free_voices[selected_voice]
+                    rate_str = f"{speed_val:+d}%"
                     
-                    # स्पीड कैलकुलेशन
-                    base_rate = int(default_rate.replace("%", ""))
-                    final_rate = f"{base_rate + speed_slider:+d}%"
-                    
-                    if engine_type == "gtts":
+                    if eng_type == "gtts":
                         tts = gTTS(text=text_input, lang='or', slow=False)
                         tts.save(output_audio)
-                    elif engine_type == "gtts_slow":
+                    elif eng_type == "gtts_slow":
                         tts = gTTS(text=text_input, lang='or', slow=True)
                         tts.save(output_audio)
                     else:
-                        asyncio.run(generate_edge(text_input, voice_code, final_rate, default_pitch, output_audio))
-                
-                # 2. ElevenLabs प्रीमियम लॉजिक
+                        asyncio.run(generate_edge_speech(text_input, code, rate_str, output_audio))
+
+                # 2. Google Gemini इंजन
+                elif engine_choice.startswith("✨"):
+                    client = genai.Client(api_key=api_key)
+                    prompt = f"इस टेक्स्ट को {gemini_tone} के अंदाज़ में वॉइस-ओवर के लिए सबसे बेहतरीन और नेचुरल फ्लो में ढालें: {text_input}"
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt
+                    )
+                    polished_text = response.text
+                    
+                    if "Odia" in selected_voice:
+                        tts = gTTS(text=polished_text, lang='or', slow=False)
+                        tts.save(output_audio)
+                    elif "Madhur" in selected_voice:
+                        asyncio.run(generate_edge_speech(polished_text, "hi-IN-MadhurNeural", "+0%", output_audio))
+                    else:
+                        asyncio.run(generate_edge_speech(polished_text, "hi-IN-SwaraNeural", "+0%", output_audio))
+
+                # 3. ElevenLabs इंजन
                 else:
-                    voice_id = elevenlabs_voices[selected_voice]
-                    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+                    v_id = elevenlabs_voices[selected_voice]
+                    url = f"https://api.elevenlabs.io/v1/text-to-speech/{v_id}"
                     headers = {
-                        "Accept": "audio/mpeg",
-                        "Content-Type": "application/json",
+                        "Accept": "audio/mpeg", 
+                        "Content-Type": "application/json", 
                         "xi-api-key": api_key
                     }
                     data = {
@@ -123,16 +143,18 @@ if st.button("🚀 Generate Audio (MP3)"):
                         with open(output_audio, "wb") as f:
                             f.write(resp.content)
                     else:
-                        raise Exception(f"{resp.status_code} - {resp.text}")
+                        raise Exception(f"ElevenLabs Error ({resp.status_code}): {resp.text}")
 
+                # सफलता और डाउनलोड
                 st.success("🎉 ऑडियो सफलतापूर्वक तैयार हो गया!")
                 st.audio(output_audio, format="audio/mp3")
                 with open(output_audio, "rb") as file:
                     st.download_button(
                         label="⬇️ Download MP3",
                         data=file,
-                        file_name="ai_voice.mp3",
+                        file_name="ai_voice_studio.mp3",
                         mime="audio/mp3"
                     )
             except Exception as e:
                 st.error(f"त्रुटि: {e}")
+                               
