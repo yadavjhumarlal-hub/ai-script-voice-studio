@@ -22,7 +22,7 @@ engine_choice = st.sidebar.radio(
     )
 )
 
-# 1. फ्री आवाज़ें (100% वर्किंग और टेस्टेड)
+# 1. फ्री आवाज़ें
 free_voices = {
     # 🇮🇳 हिंदी आवाज़ें
     "1. Hindi - Madhur (गंभीर पुरुष / कहानी व यूट्यूब)": ("edge", "hi-IN-MadhurNeural", "+0%", "+0Hz"),
@@ -104,12 +104,12 @@ if st.button("🚀 Generate Audio (MP3)"):
                         final_rate = f"{base_rate + speed_adjust:+d}%"
                         asyncio.run(generate_edge(text_input, code, final_rate, default_pitch, output_audio))
 
-                # 2. Google Gemini इंजन
+                # 2. Google Gemini इंजन (अपडेटेड मॉडल: gemini-2.0-flash)
                 elif engine_choice.startswith("✨"):
                     client = genai.Client(api_key=api_key)
                     prompt = f"इस टेक्स्ट को {gemini_tone} के अंदाज़ में वॉइस-ओवर के लिए सबसे बेहतरीन और नेचुरल फ्लो में सुधारें: {text_input}"
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=prompt
                     )
                     polished_text = response.text
@@ -127,8 +127,8 @@ if st.button("🚀 Generate Audio (MP3)"):
                     v_id = elevenlabs_voices[selected_voice]
                     url = f"https://api.elevenlabs.io/v1/text-to-speech/{v_id}"
                     headers = {
-                        "Accept": "audio/mpeg",
-                        "Content-Type": "application/json",
+                        "Accept": "audio/mpeg", 
+                        "Content-Type": "application/json", 
                         "xi-api-key": api_key
                     }
                     data = {
