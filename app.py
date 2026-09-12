@@ -1,7 +1,6 @@
 import streamlit as st
 import edge_tts
 import asyncio
-from gtts import gTTS
 import requests
 from google import genai
 import os
@@ -16,29 +15,29 @@ st.sidebar.header("⚙️ Engine & Voice Settings")
 engine_choice = st.sidebar.radio(
     "वॉयस इंजन चुनें:",
     (
-        "🆓 100% Free & Unlimited (Edge/Google)",
+        "🆓 100% Free & Unlimited (Edge Neural)",
         "✨ Google Gemini Engine (Free API Key)",
         "💎 ElevenLabs Characters (API Key)"
     )
 )
 
-# 1. फ्री आवाज़ें
+# 1. फ्री आवाज़ें (ओड़िया न्यूरल वॉइस के साथ 100% वर्किंग)
 free_voices = {
     # 🇮🇳 हिंदी आवाज़ें
-    "1. Hindi - Madhur (गंभीर पुरुष / कहानी व यूट्यूब)": ("edge", "hi-IN-MadhurNeural", "+0%", "+0Hz"),
-    "2. Hindi - Swara (स्पष्ट महिला / समाचार व व्याख्या)": ("edge", "hi-IN-SwaraNeural", "+0%", "+0Hz"),
-    "3. Hindi - Deep Villain / Documentary (गहरी भारी आवाज़ / पुरुष)": ("edge", "hi-IN-MadhurNeural", "-10%", "-15Hz"),
-    "4. Hindi - Energetic Storyteller (उत्साही कहानीकार / पुरुष)": ("edge", "hi-IN-MadhurNeural", "+12%", "+4Hz"),
-    "5. Hindi - Soft Calm Female (शांत व मधुर / महिला)": ("edge", "hi-IN-SwaraNeural", "-8%", "-3Hz"),
-    "6. Hindi - Young Narration (तेज़ व युवा अंदाज़ / महिला)": ("edge", "hi-IN-SwaraNeural", "+15%", "+10Hz"),
+    "1. Hindi - Madhur (गंभीर पुरुष / कहानी व यूट्यूब)": ("hi-IN-MadhurNeural", "+0%", "+0Hz"),
+    "2. Hindi - Swara (स्पष्ट महिला / समाचार व व्याख्या)": ("hi-IN-SwaraNeural", "+0%", "+0Hz"),
+    "3. Hindi - Deep Villain / Documentary (गहरी भारी आवाज़ / पुरुष)": ("hi-IN-MadhurNeural", "-10%", "-15Hz"),
+    "4. Hindi - Energetic Storyteller (उत्साही कहानीकार / पुरुष)": ("hi-IN-MadhurNeural", "+12%", "+4Hz"),
+    "5. Hindi - Soft Calm Female (शांत व मधुर / महिला)": ("hi-IN-SwaraNeural", "-8%", "-3Hz"),
+    "6. Hindi - Young Narration (तेज़ व युवा अंदाज़ / महिला)": ("hi-IN-SwaraNeural", "+15%", "+10Hz"),
     
-    # 🇮🇳 ओड़िया आवाज़ें (gTTS Engine)
-    "7. Odia - Female 1 (ଓଡ଼ିଆ ମହିଳା - ସାଧାରଣ)": ("gtts", "or", "normal", "0Hz"),
-    "8. Odia - Female 2 (ଓଡ଼ିଆ ମହିଳା - ଧୀର/କାହାଣୀ)": ("gtts", "or", "slow", "0Hz"),
+    # 🇮🇳 ओड़िया आधिकारिक न्यूरल आवाज़ें (100% Free & Clear)
+    "7. Odia - Sukant (ଓଡ଼ିଆ ପୁରୁଷ / ସ୍ପଷ୍ଟ)": ("or-IN-SukantNeural", "+0%", "+0Hz"),
+    "8. Odia - Subhasini (ଓଡ଼ିଆ ମହିଳା / ମଧୁର)": ("or-IN-SubhasiniNeural", "+0%", "+0Hz"),
     
     # 🌍 इंग्लिश आवाज़ें
-    "9. English - Guy (US Narration Male)": ("edge", "en-US-GuyNeural", "+0%", "+0Hz"),
-    "10. English - Jenny (US Professional Female)": ("edge", "en-US-JennyNeural", "+0%", "+0Hz")
+    "9. English - Guy (US Narration Male)": ("en-US-GuyNeural", "+0%", "+0Hz"),
+    "10. English - Jenny (US Professional Female)": ("en-US-JennyNeural", "+0%", "+0Hz")
 }
 
 # 2. ElevenLabs आवाज़ें
@@ -61,7 +60,7 @@ if engine_choice.startswith("🆓"):
 elif engine_choice.startswith("✨"):
     api_key = st.sidebar.text_input("Google Gemini API Key डालें:", type="password", help="aistudio.google.com से मुफ़्त में लें")
     gemini_tone = st.sidebar.selectbox("Gemini का अंदाज़ (Tone):", ["कहानीकार (Storyteller)", "उत्साही (Excited)", "शांत व गंभीर (Calm & Professional)"])
-    selected_voice = st.sidebar.selectbox("आउटपुट आवाज़:", ["Hindi - Madhur (Male)", "Hindi - Swara (Female)", "Odia - Female (ଓଡ଼ିଆ)"])
+    selected_voice = st.sidebar.selectbox("आउटपुट आवाज़:", ["Hindi - Madhur (Male)", "Hindi - Swara (Female)", "Odia - Subhasini (Female)", "Odia - Sukant (Male)"])
 else:
     api_key = st.sidebar.text_input("ElevenLabs API Key डालें:", type="password", help="elevenlabs.io से अपनी Key लें")
     selected_voice = st.sidebar.selectbox("ElevenLabs कैरेक्टर चुनें:", list(elevenlabs_voices.keys()))
@@ -70,7 +69,7 @@ else:
 text_input = st.text_area(
     "यहाँ अपना टेक्स्ट लिखें या पेस्ट करें (हिंदी / ଓଡ଼ିଆ / English):",
     height=200,
-    placeholder="यहाँ वह टेक्स्ट लिखें जिसे आप AI आवाज़ में बदलना चाहते हैं..."
+    placeholder="ଓଡ଼ିଆ, ହିନ୍ଦୀ କିମ୍ବା English ଟେକ୍ସଟ୍ ଏଠାରେ ଲେଖନ୍ତୁ..."
 )
 
 # Edge TTS फंक्शन
@@ -91,20 +90,14 @@ if st.button("🚀 Generate Audio (MP3)"):
                 os.remove(output_audio)
                 
             try:
-                # 1. फ्री इंजन
+                # 1. फ्री और अनलिमिटेड न्यूरल इंजन (ओड़िया, हिंदी, इंग्लिश)
                 if engine_choice.startswith("🆓"):
-                    eng_type, code, default_rate, default_pitch = free_voices[selected_voice]
-                    
-                    if eng_type == "gtts":
-                        is_slow = (default_rate == "slow") or (speed_adjust < 0)
-                        tts = gTTS(text=text_input, lang="or", slow=is_slow)
-                        tts.save(output_audio)
-                    else:
-                        base_rate = int(default_rate.replace("%", ""))
-                        final_rate = f"{base_rate + speed_adjust:+d}%"
-                        asyncio.run(generate_edge(text_input, code, final_rate, default_pitch, output_audio))
+                    voice_code, default_rate, default_pitch = free_voices[selected_voice]
+                    base_rate = int(default_rate.replace("%", ""))
+                    final_rate = f"{base_rate + speed_adjust:+d}%"
+                    asyncio.run(generate_edge(text_input, voice_code, final_rate, default_pitch, output_audio))
 
-                # 2. Google Gemini इंजन (लेटेस्ट मॉडल: gemini-3.6-flash)
+                # 2. Google Gemini इंजन
                 elif engine_choice.startswith("✨"):
                     client = genai.Client(api_key=api_key)
                     prompt = f"इस टेक्स्ट को {gemini_tone} के अंदाज़ में वॉइस-ओवर के लिए सबसे बेहतरीन और नेचुरल फ्लो में सुधारें: {text_input}"
@@ -114,13 +107,16 @@ if st.button("🚀 Generate Audio (MP3)"):
                     )
                     polished_text = response.text
                     
-                    if "Odia" in selected_voice:
-                        tts = gTTS(text=polished_text, lang="or", slow=False)
-                        tts.save(output_audio)
+                    if "Subhasini" in selected_voice:
+                        target_code = "or-IN-SubhasiniNeural"
+                    elif "Sukant" in selected_voice:
+                        target_code = "or-IN-SukantNeural"
                     elif "Madhur" in selected_voice:
-                        asyncio.run(generate_edge(polished_text, "hi-IN-MadhurNeural", "+0%", "+0Hz", output_audio))
+                        target_code = "hi-IN-MadhurNeural"
                     else:
-                        asyncio.run(generate_edge(polished_text, "hi-IN-SwaraNeural", "+0%", "+0Hz", output_audio))
+                        target_code = "hi-IN-SwaraNeural"
+                        
+                    asyncio.run(generate_edge(polished_text, target_code, "+0%", "+0Hz", output_audio))
 
                 # 3. ElevenLabs इंजन
                 else:
@@ -155,4 +151,3 @@ if st.button("🚀 Generate Audio (MP3)"):
                     )
             except Exception as e:
                 st.error(f"त्रुटि: {e}")
-    
