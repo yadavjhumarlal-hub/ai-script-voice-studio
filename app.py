@@ -36,8 +36,8 @@ free_voices = {
     "10. Hindi - Corporate Presentation (प्रोफेशनल - Female)": ("hi-IN-SwaraNeural", 4),
     
     # 🇮🇳 ओड़िया आधिकारिक न्यूरल आवाज़ें
-    "11. Odia - Sukant (ଓଡ଼ିଆ ପୁରୁଷ / Male)": ("or-IN-SukantNeural", 0),
-    "12. Odia - Subhasini (ଓଡ଼ିଆ ମହିଳା / Female)": ("or-IN-SubhasiniNeural", 0),
+    "11. Odia - Sukant (ଓଡ଼ିଆ ପୁରୁଷ / Male)": ("ory-IN-SukantNeural", 0),
+    "12. Odia - Subhasini (ଓଡ଼ିଆ ମହିଳା / Female)": ("ory-IN-SubhasiniNeural", 0),
     
     # 🌍 इंग्लिश आवाज़ें
     "13. English - Guy (US Narration Male)": ("en-US-GuyNeural", 0),
