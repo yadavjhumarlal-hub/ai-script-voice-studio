@@ -2,4 +2,3 @@ streamlit
 edge-tts
 requests
 google-genai
-youtube-transcript-api
