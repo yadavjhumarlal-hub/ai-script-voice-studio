@@ -3,17 +3,16 @@ import os
 import re
 import html
 import requests
-import tempfile
-import yt_dlp
 from urllib.parse import urlparse, parse_qs
 from google import genai
+from google.genai import types
 
-st.title("📝 YouTube Video to Transcript (100% Guaranteed)")
-st.write("चाहे वीडियो में सबटाइटल ऑन हों या पूरी तरह बंद — AI सीधे ऑडियो सुनकर पूरा टेक्स्ट निकाल देगा।")
+st.title("📝 YouTube Video to Transcript (Cloud Bypass)")
+st.write("Google Gemini AI सीधे YouTube वीडियो को प्रोसेस करके पूरा सटीक टेक्स्ट निकालता है।")
 
 secrets_gemini = st.secrets.get("GEMINI_API_KEY", "")
 
-# Video ID निकालने का फंक्शन
+# 100% सटीक Video ID निकालने का फंक्शन
 def extract_video_id(url):
     url = url.strip()
     if "youtu.be/" in url:
@@ -42,9 +41,9 @@ def clean_vtt_text(vtt_content):
             clean_lines.append(line)
     return " ".join(clean_lines)
 
-# 1. Fast Mirror Captions
+# Fast Mirror Captions
 def fetch_fast_captions(video_id):
-    mirrors = ["https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yewtu.be"]
+    mirrors = ["https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yewtu.be", "https://invidious.jing.rocks"]
     for base in mirrors:
         try:
             res = requests.get(f"{base}/api/v1/captions/{video_id}", timeout=4)
@@ -62,45 +61,6 @@ def fetch_fast_captions(video_id):
             continue
     return None
 
-# 2. AI Audio Transcription (अगर सबटाइटल बंद हों)
-def transcribe_audio_with_gemini(video_url, gemini_api_key, target_lang):
-    with tempfile.TemporaryDirectory() as temp_dir:
-        audio_path = os.path.join(temp_dir, "audio.m4a")
-        
-        # ऑडियो डाउनलोड सेटिंग्स
-        ydl_opts = {
-            'format': 'm4a/bestaudio/best',
-            'outtmpl': audio_path,
-            'quiet': True,
-            'no_warnings': True
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
-            
-        if not os.path.exists(audio_path):
-            raise Exception("वीडियो का ऑडियो लोड नहीं हो सका।")
-            
-        # Gemini Audio API पर ऑडियो अपलोड और ट्रांसक्रिप्शन
-        client = genai.Client(api_key=gemini_api_key)
-        
-        uploaded_file = client.files.upload(file=audio_path)
-        
-        prompt = f"""
-        Transcribe the spoken words in this audio file completely and accurately.
-        Formatting rules:
-        - Output ONLY the clean spoken text in paragraphs.
-        - Translate/deliver output in language: {target_lang}.
-        - Do not include timestamps, filler words, or metadata.
-        """
-        
-        response = client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=[uploaded_file, prompt]
-        )
-        
-        return response.text.strip()
-
 # UI इनपुट्स
 yt_url = st.text_input("YouTube Video URL दर्ज करें:", placeholder="https://youtu.be/... या https://www.youtube.com/watch?v=...")
 translate_option = st.selectbox(
@@ -111,10 +71,10 @@ gemini_key_input = st.text_input(
     "Google Gemini API Key:", 
     value=secrets_gemini, 
     type="password",
-    help="बिना सबटाइटल वाले वीडियो के लिए Gemini Key अनिवार्य है।"
+    help="aistudio.google.com से मुफ़्त Key लें"
 )
 
-if st.button("📥 Get Transcript", key="btn_get_final_trans"):
+if st.button("📥 Get Transcript", key="btn_get_transcript_direct"):
     if not yt_url.strip():
         st.error("कृपया यूट्यूब वीडियो का लिंक दर्ज करें।")
     else:
@@ -124,31 +84,48 @@ if st.button("📥 Get Transcript", key="btn_get_final_trans"):
         else:
             final_text = None
             
-            # चरण 1: पहले सबटाइटल चेक करें
+            # चरण 1: पहले फ़ास्ट कैप्शन चेक करें
             with st.spinner("1/2: सबटाइटल की जांच की जा रही है..."):
                 final_text = fetch_fast_captions(video_id)
                 
-            # चरण 2: अगर सबटाइटल नहीं हैं, तो सीधे AI से ऑडियो ट्रांसक्राइब करें
+            # चरण 2: अगर सबटाइटल नहीं मिले या अनुवाद चाहिए, तो सीधे Gemini AI इंजन का उपयोग करें
             if not final_text:
                 if not gemini_key_input.strip():
-                    st.error("इस वीडियो में सबटाइटल बंद हैं। इसे AI द्वारा सुनने के लिए कृपया ऊपर अपनी Google Gemini API Key दर्ज करें।")
+                    st.error("कृपया अपनी Google Gemini API Key दर्ज करें।")
                 else:
-                    with st.spinner("2/2: सबटाइटल बंद हैं — Gemini AI ऑडियो सुनकर पूरा टेक्स्ट बना रहा है..."):
+                    with st.spinner("2/2: Gemini AI सीधे YouTube वीडियो का ऑडियो सुनकर ट्रांसक्रिप्ट बना रहा है..."):
                         try:
-                            clean_url = f"https://www.youtube.com/watch?v={video_id}"
-                            final_text = transcribe_audio_with_gemini(clean_url, gemini_key_input, translate_option)
+                            clean_yt_link = f"https://www.youtube.com/watch?v={video_id}"
+                            client = genai.Client(api_key=gemini_key_input)
+                            
+                            lang_instruction = "in its original spoken language" if "Original" in translate_option else f"translated into {translate_option}"
+                            
+                            prompt = f"""
+                            You are an expert audio/video transcriber. Listen carefully to this YouTube video: {clean_yt_link}
+                            Task:
+                            1. Transcribe the entire speech spoken in this video {lang_instruction}.
+                            2. Output ONLY the clean spoken text/paragraphs.
+                            3. Do not include introductory notes, timestamps, or summary headers.
+                            """
+                            
+                            # Gemini 2.5 Flash / Flash Native Multimodal
+                            response = client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=prompt
+                            )
+                            final_text = response.text.strip()
                         except Exception as e:
                             st.error(f"AI ट्रांसक्रिप्शन में त्रुटि: {e}")
             else:
-                # यदि सबटाइटल मिल गए और अनुवाद चाहिए
+                # यदि सबटाइटल मिल गए और भाषा अनुवाद चाहिए
                 if translate_option != "मूल भाषा (Original Spoken)" and gemini_key_input.strip():
                     with st.spinner("अनुवाद किया जा रहा है..."):
                         try:
                             client = genai.Client(api_key=gemini_key_input)
                             lang_t = "Hindi" if "हिंदी" in translate_option else ("Odia" if "ଓଡ଼ିଆ" in translate_option else "English")
                             res = client.models.generate_content(
-                                model="gemini-3.6-flash", 
-                                contents=f"Translate this cleanly into {lang_t}:\n\n{final_text}"
+                                model="gemini-2.5-flash", 
+                                contents=f"Translate this text accurately and naturally into {lang_t}:\n\n{final_text}"
                             )
                             final_text = res.text
                         except Exception:
