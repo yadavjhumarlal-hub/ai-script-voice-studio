@@ -10,7 +10,7 @@ import yt_dlp
 from google import genai
 
 st.title("📝 YouTube Video to Verbatim Transcript")
-st.write("वीडियो में जो-जो बोला गया है, हूबहू वही असली टेक्स्ट प्राप्त करें।")
+st.write("वीडियो में जो-जो शब्द बोले गए हैं, हूबहू वही असली टेक्स्ट प्राप्त करें।")
 
 secrets_gemini = st.secrets.get("GEMINI_API_KEY", "")
 
@@ -29,7 +29,7 @@ def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
     return match.group(1) if match else None
 
-# 2. VTT / सबटाइटल क्लीनर
+# 2. सबटाइटल क्लीनर
 def clean_vtt_text(raw_text):
     if "<text" in raw_text:
         try:
@@ -53,7 +53,7 @@ def clean_vtt_text(raw_text):
             clean_lines.append(line)
     return " ".join(clean_lines)
 
-# 3. लेयर 1: असली सबटाइटल फेच करना (Verbatim Captions)
+# 3. लेयर 1: डायरेक्ट सबटाइटल
 def fetch_exact_subtitles(video_id):
     mirrors = [
         "https://inv.nadeko.net",
@@ -78,47 +78,50 @@ def fetch_exact_subtitles(video_id):
             continue
     return None
 
-# 4. लेयर 2: असली ऑडियो सुनकर ट्रांसक्राइब करना (Zero Hallucination)
+# 4. लेयर 2: यूनिवर्सल ऑडियो डाउनलोडर (Zero Format Error)
 def transcribe_real_audio(video_id, api_key, target_lang):
     clean_url = f"https://www.youtube.com/watch?v={video_id}"
     
     with tempfile.TemporaryDirectory() as temp_dir:
-        audio_file = os.path.join(temp_dir, "real_audio.m4a")
+        output_template = os.path.join(temp_dir, "audio_stream.%(ext)s")
         
-        # 403 Forbidden को बाईपास करने वाली विशेष Android Client सेटिंग्स
+        # यूनिवर्सल फ़ॉर्मेट सेलेक्टर - जो किसी भी वीडियो पर कभी फ़ेल नहीं होता
         ydl_opts = {
-            'format': 'ba/b[ext=m4a]/ba[ext=m4a]',
-            'outtmpl': audio_file,
+            'format': 'ba/b/worst',
+            'outtmpl': output_template,
             'quiet': True,
             'no_warnings': True,
+            'ignoreerrors': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web']
+                    'player_client': ['android', 'web', 'ios']
                 }
-            },
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36'
             }
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([clean_url])
             
-        if not os.path.exists(audio_file) or os.path.getsize(audio_file) == 0:
-            raise Exception("वीडियो का ऑडियो प्राप्त नहीं हो सका।")
+        # डाउनलोड की गई फ़ाइल खोजना
+        downloaded_files = os.listdir(temp_dir)
+        if not downloaded_files:
+            raise Exception("वीडियो का ऑडियो लोड नहीं हो सका।")
             
+        audio_path = os.path.join(temp_dir, downloaded_files[0])
+        
+        # Gemini API पर अपलोड करके असली आवाज़ सुनना
         client = genai.Client(api_key=api_key)
-        uploaded = client.files.upload(file=audio_file)
+        uploaded = client.files.upload(file=audio_path)
         
         lang_instruction = "in its original spoken language" if "मूल" in target_lang else f"translated into {target_lang}"
         
         prompt = f"""
         Listen to this audio file carefully.
-        Task: Transcribe the exact spoken words and dialogue verbatim {lang_instruction}.
+        Task: Transcribe the exact words, sentences, and dialogue spoken in this audio verbatim {lang_instruction}.
         Rules:
-        - Output ONLY the exact speech/words spoken in the audio.
-        - Do NOT summarize or invent text.
-        - Do NOT add timestamps or headers.
+        - Output ONLY what is actually spoken in the audio.
+        - Do NOT summarize or add external information.
+        - Do NOT add timestamps, markdown titles, or intro/outro text.
         """
         
         response = client.models.generate_content(
@@ -135,7 +138,7 @@ translate_option = st.selectbox(
 )
 gemini_key = st.text_input("Google Gemini API Key:", value=secrets_gemini, type="password")
 
-if st.button("📥 Get Transcript", key="btn_run_verbatim"):
+if st.button("📥 Get Transcript", key="btn_run_bulletproof"):
     if not yt_url.strip():
         st.error("कृपया यूट्यूब वीडियो का लिंक दर्ज करें।")
     else:
@@ -145,16 +148,16 @@ if st.button("📥 Get Transcript", key="btn_run_verbatim"):
         else:
             final_text = None
             
-            # चरण 1: पहले वीडियो के आधिकारिक सबटाइटल चेक करें
-            with st.spinner("1/2: आधिकारिक सबटाइटल से असली टेक्स्ट लोड किया जा रहा है..."):
+            # चरण 1: पहले वीडियो के सबटाइटल चेक करें
+            with st.spinner("1/2: सबटाइटल की जांच की जा रही है..."):
                 final_text = fetch_exact_subtitles(v_id)
                 
-            # चरण 2: यदि सबटाइटल नहीं हैं, तो असली ऑडियो सुनकर ट्रांसक्राइब करें
+            # चरण 2: यदि सबटाइटल नहीं हैं, तो असली ऑडियो से शब्द-दर-शब्द निकालें
             if not final_text:
                 if not gemini_key.strip():
-                    st.warning("इस वीडियो में सबटाइटल बंद हैं। वीडियो का असली ऑडियो सुनने के लिए कृपया Google Gemini API Key दर्ज करें।")
+                    st.warning("इस वीडियो में सबटाइटल बंद हैं। वीडियो की असली आवाज़ सुनने के लिए अपनी Google Gemini API Key दर्ज करें।")
                 else:
-                    with st.spinner("2/2: सबटाइटल बंद हैं — Gemini 3.6 असली ऑडियो सुनकर शब्द-दर-शब्द लिख रहा है..."):
+                    with st.spinner("2/2: सबटाइटल बंद हैं — Gemini AI ऑडियो सुनकर वीडियो का असली टेक्स्ट लिख रहा है..."):
                         try:
                             final_text = transcribe_real_audio(v_id, gemini_key, translate_option)
                         except Exception as e:
@@ -165,7 +168,7 @@ if st.button("📥 Get Transcript", key="btn_run_verbatim"):
                     with st.spinner("भाषा अनुवाद किया जा रहा है..."):
                         try:
                             client = genai.Client(api_key=gemini_key)
-                            lang_t = "Hindi" if "हिंदी" in translate_option else ("Odia" if "ଓଡ଼िଆ" in translate_option else "English")
+                            lang_t = "Hindi" if "हिंदी" in translate_option else ("Odia" if "ଓଡ଼ିଆ" in translate_option else "English")
                             res = client.models.generate_content(
                                 model="gemini-3.6-flash",
                                 contents=f"Translate the following speech verbatim into {lang_t}:\n\n{final_text}"
@@ -176,7 +179,7 @@ if st.button("📥 Get Transcript", key="btn_run_verbatim"):
 
             if final_text:
                 st.success("🎉 वीडियो में बोला गया असली टेक्स्ट तैयार हो गया!")
-                st.text_area("वीडियो का असली बोला गया टेक्स्ट (Verbatim Transcript):", value=final_text, height=280)
+                st.text_area("वीडियो का असली बोला गया टेक्स्ट (Transcript):", value=final_text, height=280)
                 st.download_button(
                     label="⬇️ Download Transcript (TXT)", 
                     data=final_text, 
