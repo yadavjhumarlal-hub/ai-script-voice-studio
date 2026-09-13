@@ -7,8 +7,8 @@ from urllib.parse import urlparse, parse_qs
 from google import genai
 from google.genai import types
 
-st.title("📝 YouTube Video to Transcript (Cloud Bypass)")
-st.write("Google Gemini AI सीधे YouTube वीडियो को प्रोसेस करके पूरा सटीक टेक्स्ट निकालता है।")
+st.title("📝 YouTube Video to Transcript")
+st.write("सटीक AI ट्रांसक्रिप्ट — किसी भी यूट्यूब वीडियो का पूरा टेक्स्ट प्राप्त करें।")
 
 secrets_gemini = st.secrets.get("GEMINI_API_KEY", "")
 
@@ -27,7 +27,7 @@ def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
     return match.group(1) if match else None
 
-# VTT क्लीनर
+# सबटाइटल क्लीनर
 def clean_vtt_text(vtt_content):
     lines = vtt_content.splitlines()
     clean_lines = []
@@ -43,7 +43,12 @@ def clean_vtt_text(vtt_content):
 
 # Fast Mirror Captions
 def fetch_fast_captions(video_id):
-    mirrors = ["https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yewtu.be", "https://invidious.jing.rocks"]
+    mirrors = [
+        "https://inv.nadeko.net", 
+        "https://invidious.nerdvpn.de", 
+        "https://yewtu.be", 
+        "https://invidious.jing.rocks"
+    ]
     for base in mirrors:
         try:
             res = requests.get(f"{base}/api/v1/captions/{video_id}", timeout=4)
@@ -61,7 +66,7 @@ def fetch_fast_captions(video_id):
             continue
     return None
 
-# UI इनपुट्स
+# UI इनपुट
 yt_url = st.text_input("YouTube Video URL दर्ज करें:", placeholder="https://youtu.be/... या https://www.youtube.com/watch?v=...")
 translate_option = st.selectbox(
     "ट्रांसक्रिप्ट किस भाषा में चाहिए?",
@@ -71,47 +76,53 @@ gemini_key_input = st.text_input(
     "Google Gemini API Key:", 
     value=secrets_gemini, 
     type="password",
-    help="aistudio.google.com से मुफ़्त Key लें"
+    help="aistudio.google.com से प्राप्त मुफ़्त Key"
 )
 
-if st.button("📥 Get Transcript", key="btn_get_transcript_direct"):
+if st.button("📥 Get Transcript", key="btn_get_transcript_final"):
     if not yt_url.strip():
         st.error("कृपया यूट्यूब वीडियो का लिंक दर्ज करें।")
     else:
         video_id = extract_video_id(yt_url)
         if not video_id:
-            st.error("अमान्य YouTube URL!")
+            st.error("अमान्य YouTube URL! कृपया सही वीडियो लिंक दर्ज करें।")
         else:
             final_text = None
             
-            # चरण 1: पहले फ़ास्ट कैप्शन चेक करें
-            with st.spinner("1/2: सबटाइटल की जांच की जा रही है..."):
+            # चरण 1: पहले फ़ास्ट कैप्शन की जांच करें
+            with st.spinner("1/2: वीडियो सबटाइटल की जांच हो रही है..."):
                 final_text = fetch_fast_captions(video_id)
                 
-            # चरण 2: अगर सबटाइटल नहीं मिले या अनुवाद चाहिए, तो सीधे Gemini AI इंजन का उपयोग करें
+            # चरण 2: अगर सबटाइटल नहीं मिले, तो Gemini 3.6 Flash इंजन का उपयोग करें
             if not final_text:
                 if not gemini_key_input.strip():
                     st.error("कृपया अपनी Google Gemini API Key दर्ज करें।")
                 else:
-                    with st.spinner("2/2: Gemini AI सीधे YouTube वीडियो का ऑडियो सुनकर ट्रांसक्रिप्ट बना रहा है..."):
+                    with st.spinner("2/2: Gemini AI (v3.6) सीधे वीडियो का विश्लेषण करके ट्रांसक्रिप्ट तैयार कर रहा है..."):
                         try:
                             clean_yt_link = f"https://www.youtube.com/watch?v={video_id}"
                             client = genai.Client(api_key=gemini_key_input)
                             
-                            lang_instruction = "in its original spoken language" if "Original" in translate_option else f"translated into {translate_option}"
+                            lang_target = "original spoken language" if "Original" in translate_option else translate_option
                             
                             prompt = f"""
-                            You are an expert audio/video transcriber. Listen carefully to this YouTube video: {clean_yt_link}
+                            You are an expert video transcriber. 
+                            Analyze this YouTube video carefully: {clean_yt_link}
+                            Video ID: {video_id}
+                            
                             Task:
-                            1. Transcribe the entire speech spoken in this video {lang_instruction}.
-                            2. Output ONLY the clean spoken text/paragraphs.
-                            3. Do not include introductory notes, timestamps, or summary headers.
+                            1. Extract and write the complete, detailed spoken transcript/dialogue of this video in {lang_target}.
+                            2. Output ONLY the clean paragraphs of what is spoken.
+                            3. Do not add introductory remarks, timestamps, or summary bullets.
                             """
                             
-                            # Gemini 2.5 Flash / Flash Native Multimodal
+                            # Google Search Grounding के साथ मॉडल कॉल
                             response = client.models.generate_content(
-                                model="gemini-2.5-flash",
-                                contents=prompt
+                                model="gemini-3.6-flash",
+                                contents=prompt,
+                                config=types.GenerateContentConfig(
+                                    tools=[{"google_search": {}}]
+                                )
                             )
                             final_text = response.text.strip()
                         except Exception as e:
@@ -124,7 +135,7 @@ if st.button("📥 Get Transcript", key="btn_get_transcript_direct"):
                             client = genai.Client(api_key=gemini_key_input)
                             lang_t = "Hindi" if "हिंदी" in translate_option else ("Odia" if "ଓଡ଼ିଆ" in translate_option else "English")
                             res = client.models.generate_content(
-                                model="gemini-2.5-flash", 
+                                model="gemini-3.6-flash", 
                                 contents=f"Translate this text accurately and naturally into {lang_t}:\n\n{final_text}"
                             )
                             final_text = res.text
@@ -133,10 +144,10 @@ if st.button("📥 Get Transcript", key="btn_get_transcript_direct"):
 
             if final_text:
                 st.success("🎉 ट्रांसक्रिप्ट सफलतापूर्वक प्राप्त हो गया!")
-                st.text_area("वीडियो का पूरा टेक्स्ट (Transcript):", value=final_text, height=260)
+                st.text_area("वीडियो का पूरा टेक्स्ट (Transcript):", value=final_text, height=270)
                 st.download_button(
                     label="⬇️ Download Transcript (TXT)", 
                     data=final_text, 
                     file_name=f"transcript_{video_id}.txt", 
                     mime="text/plain"
-    )
+)
