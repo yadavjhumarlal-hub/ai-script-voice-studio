@@ -6,8 +6,6 @@ from google import genai
 import os
 import re
 import html
-import json
-import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, parse_qs
 
 st.set_page_config(page_title="Universal AI Voice & Video Studio", page_icon="🎙️", layout="centered")
@@ -16,7 +14,7 @@ st.set_page_config(page_title="Universal AI Voice & Video Studio", page_icon="�
 secrets_gemini = st.secrets.get("GEMINI_API_KEY", "")
 secrets_eleven = st.secrets.get("ELEVEN_API_KEY", "")
 
-# 100% सटीक Video ID निकालने का फंक्शन
+# Video ID निकालने का बुलेटप्रूफ फंक्शन
 def extract_video_id(url):
     url = url.strip()
     if "youtu.be/" in url:
@@ -31,68 +29,64 @@ def extract_video_id(url):
     match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11})", url)
     return match.group(1) if match else None
 
-# YouTube Innertube Engine (100% No IP Block Transcript Fetcher)
-def fetch_youtube_transcript_clean(video_id):
-    endpoint = "https://www.youtube.com/youtubei/v1/player"
-    headers = {
-        "User-Agent": "com.google.android.youtube/19.29.37 (Linux; U; Android 14)",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "context": {
-            "client": {
-                "clientName": "ANDROID",
-                "clientVersion": "19.29.37",
-                "androidSdkVersion": 34,
-                "hl": "hi",
-                "gl": "IN"
-            }
-        },
-        "videoId": video_id
-    }
-    
-    response = requests.post(endpoint, headers=headers, json=payload, timeout=12)
-    if response.status_code != 200:
-        raise Exception(f"YouTube सर्वर से कनेक्ट नहीं हो सका (Status: {response.status_code})")
-        
-    data = response.json()
-    
-    # सबटाइटल ट्रैक्स खोजें
-    captions = data.get("captions", {}).get("playerCaptionsTracklistRenderer", {}).get("captionTracks", [])
-    
-    if not captions:
-        title = data.get("videoDetails", {}).get("title", "Unknown Video")
-        raise Exception(f"इस वीडियो ('{title}') के लिए सबटाइटल / ट्रांसक्रिप्ट बंद या उपलब्ध नहीं है।")
-        
-    # पहली उपलब्ध सबटाइटल फ़ाइल लाएं
-    base_url = captions[0].get("baseUrl")
-    if not base_url:
-        raise Exception("सबटाइटल डेटा प्राप्त नहीं हो सका।")
-        
-    # JSON3 या XML से साफ़ टेक्स्ट निकालना
-    try:
-        cap_res = requests.get(base_url + "&fmt=json3", timeout=10)
-        cap_json = cap_res.json()
-        lines = []
-        for event in cap_json.get("events", []):
-            segs = event.get("segs", [])
-            line = "".join([s.get("utf8", "") for s in segs]).strip()
-            if line:
-                lines.append(line)
-        if lines:
-            return " ".join(lines)
-    except Exception:
-        pass
-        
-    # बैकअप XML पार्सर
-    xml_res = requests.get(base_url, timeout=10)
-    root = ET.fromstring(xml_res.text)
-    lines = [html.unescape(node.text or '') for node in root.findall('.//text')]
-    return " ".join([l for l in lines if l.strip()])
+# WebVTT / सबटाइटल को साफ़ टेक्स्ट में बदलने वाला क्लीनर
+def clean_vtt_text(vtt_content):
+    lines = vtt_content.splitlines()
+    clean_lines = []
+    for line in lines:
+        line = line.strip()
+        # हेडर, टाइमस्टैम्प और खाली लाइनें हटाएं
+        if not line or "WEBVTT" in line or "-->" in line or line.isdigit() or line.startswith("Kind:") or line.startswith("Language:"):
+            continue
+        # HTML टैग्स हटाएं (जैसे <c> </c>)
+        line = re.sub(r'<[^>]+>', '', line)
+        line = html.unescape(line)
+        if line and (not clean_lines or clean_lines[-1] != line):
+            clean_lines.append(line)
+    return " ".join(clean_lines)
 
-# ==========================================
-# टैब इंटरफ़ेस
-# ==========================================
+# मल्टी-सर्वर बाईपास ट्रांसक्रिप्ट फेचर (No IP Block)
+def fetch_transcript_unblocked(video_id):
+    # मल्टीपल हाई-स्पीड बैकअप सर्वर्स
+    mirror_instances = [
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://yewtu.be",
+        "https://invidious.jing.rocks",
+        "https://invidious.projectsegfau.lt"
+    ]
+    
+    last_error = ""
+    for base_url in mirror_instances:
+        try:
+            api_url = f"{base_url}/api/v1/captions/{video_id}"
+            res = requests.get(api_url, timeout=6)
+            if res.status_code == 200:
+                captions = res.json()
+                if not captions:
+                    continue
+                
+                # पहली उपलब्ध सबटाइटल फ़ाइल चुनें
+                cap_path = captions[0].get("url")
+                if cap_path:
+                    full_cap_url = base_url + cap_path if cap_path.startswith("/") else cap_path
+                    cap_res = requests.get(full_cap_url, timeout=6)
+                    if cap_res.status_code == 200:
+                        text = clean_vtt_text(cap_res.text)
+                        if text:
+                            return text
+        except Exception as e:
+            last_error = str(e)
+            continue
+            
+    # अगर किसी वीडियो में सबटाइटल डिसेबल हों
+    raise Exception("इस वीडियो में सबटाइटल (Captions) बंद हैं या YouTube ने इसे ब्लॉक किया हुआ है। कृपया कोई ऐसी वीडियो आज़माएँ जिसमें सबटाइटल ऑन हों।")
+
+# सेशन स्टेट इनिशियलाइज़ेशन
+if "shared_text" not in st.session_state:
+    st.session_state.shared_text = ""
+
+# टैब स्ट्रक्चर
 tab1, tab2 = st.tabs(["🎙️ Voice Studio", "📝 YouTube Video Transcribe"])
 
 # ==========================================
@@ -150,7 +144,8 @@ with tab1:
         api_key = st.sidebar.text_input("ElevenLabs API Key:", value=secrets_eleven, type="password")
         selected_voice = st.sidebar.selectbox("ElevenLabs कैरेक्टर चुनें:", list(elevenlabs_voices.keys()))
 
-    text_input = st.text_area("यहाँ अपना टेक्स्ट लिखें या पेस्ट करें:", height=180, key="voice_text_input")
+    # टेक्स्ट एरिया (Session state से ऑटो-अपडेट होता है)
+    text_input = st.text_area("यहाँ अपना टेक्स्ट लिखें या पेस्ट करें:", value=st.session_state.shared_text, height=180, key="voice_text_input")
 
     async def generate_edge_clean(text, voice_code, rate_str, output_file):
         communicate = edge_tts.Communicate(text, voice_code, rate=rate_str)
@@ -197,7 +192,7 @@ with tab1:
                     st.error(f"त्रुटि: {e}")
 
 # ==========================================
-# TAB 2: YOUTUBE TRANSCRIBE (100% FIXED)
+# TAB 2: YOUTUBE TRANSCRIBE (100% UNBLOCKED)
 # ==========================================
 with tab2:
     st.header("📝 YouTube Video to Transcript")
@@ -212,7 +207,7 @@ with tab2:
     
     gemini_key_for_trans = st.text_input("Google Gemini API Key (अनुवाद के लिए वैकल्पिक):", value=secrets_gemini, type="password")
 
-    if st.button("📥 Get Transcript", key="btn_get_transcript_innertube"):
+    if st.button("📥 Get Transcript", key="btn_get_transcript_global"):
         if not yt_url.strip():
             st.error("कृपया यूट्यूब वीडियो का लिंक डालें।")
         else:
@@ -220,9 +215,9 @@ with tab2:
             if not video_id:
                 st.error("अमान्य YouTube URL! कृपया सही वीडियो लिंक डालें।")
             else:
-                with st.spinner("वीडियो से टेक्स्ट निकाला जा रहा है..."):
+                with st.spinner("सुरक्षित सर्वर से ट्रांसक्रिप्ट प्राप्त किया जा रहा है..."):
                     try:
-                        raw_text = fetch_youtube_transcript_clean(video_id)
+                        raw_text = fetch_transcript_unblocked(video_id)
                         
                         # यदि यूज़र अनुवाद चाहता है
                         final_text = raw_text
@@ -230,18 +225,26 @@ with tab2:
                             with st.spinner("AI द्वारा भाषा अनुवाद किया जा रहा है..."):
                                 client = genai.Client(api_key=gemini_key_for_trans)
                                 lang_target = "Hindi" if "हिंदी" in translate_option else "English"
-                                prompt = f"Translate the following transcript accurately and naturally into {lang_target}:\n\n{raw_text}"
+                                prompt = f"Translate the following text cleanly and accurately into {lang_target}:\n\n{raw_text}"
                                 res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
                                 final_text = res.text
                                 
                         st.success("🎉 ट्रांसक्रिप्ट सफलतापूर्वक प्राप्त हो गया!")
                         st.text_area("वीडियो का पूरा टेक्स्ट (Transcript):", value=final_text, height=260)
                         
-                        st.download_button(
-                            label="⬇️ Download Transcript (TXT)",
-                            data=final_text,
-                            file_name=f"transcript_{video_id}.txt",
-                            mime="text/plain"
-                        )
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.download_button(
+                                label="⬇️ Download Transcript (TXT)",
+                                data=final_text,
+                                file_name=f"transcript_{video_id}.txt",
+                                mime="text/plain"
+                            )
+                        with col2:
+                            if st.button("🎙️ Send to Voice Studio (ऑडियो बनाने के लिए भेजें)"):
+                                st.session_state.shared_text = final_text
+                                st.rerun()
+
                     except Exception as e:
                         st.error(f"त्रुटि: {e}")
+            
