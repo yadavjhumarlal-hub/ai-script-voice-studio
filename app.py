@@ -10,10 +10,12 @@ st.set_page_config(page_title="Universal AI Voice Studio", page_icon="🎙️", 
 st.title("🎙️ Universal AI Voice Studio")
 st.write("फ्री अनलिमिटेड न्यूरल आवाज़ें + Google Gemini AI + ElevenLabs कैरेक्टर")
 
+# Secrets से API Keys लोड करना
 secrets_gemini = st.secrets.get("GEMINI_API_KEY", "")
 secrets_eleven = st.secrets.get("ELEVEN_API_KEY", "")
 
-st.sidebar.header("⚙️ Engine & Voice Settings")
+# साइडबार - सेटिंग्स
+st.sidebar.header("⚙️ Voice Settings")
 engine_choice = st.sidebar.radio(
     "वॉयस इंजन चुनें:",
     (
@@ -23,6 +25,7 @@ engine_choice = st.sidebar.radio(
     )
 )
 
+# 1. फ्री आवाज़ों की सूची (हिंदी 10, इंग्लिश 2)
 free_voices = {
     "1. Hindi - Madhur (कहानी / Male)": ("hi-IN-MadhurNeural", 0),
     "2. Hindi - Swara (समाचार / Female)": ("hi-IN-SwaraNeural", 0),
@@ -38,6 +41,7 @@ free_voices = {
     "12. English - Jenny (US Female)": ("en-US-JennyNeural", 0)
 }
 
+# 2. ElevenLabs आवाज़ें
 elevenlabs_voices = {
     "Adam (डीप नरेशन / मेल)": "pNInz6obpgDQGcFmaJgB",
     "Rachel (प्रोफेशनल / फीमेल)": "21m00Tcm4TlvDq8ikWAM",
@@ -61,6 +65,7 @@ else:
     api_key = st.sidebar.text_input("ElevenLabs API Key:", value=secrets_eleven, type="password")
     selected_voice = st.sidebar.selectbox("ElevenLabs कैरेक्टर चुनें:", list(elevenlabs_voices.keys()))
 
+# टेक्स्ट इनपुट
 text_input = st.text_area(
     "यहाँ अपना टेक्स्ट लिखें या पेस्ट करें (हिंदी / ଓଡ଼ିଆ / English):",
     height=200,
@@ -82,16 +87,19 @@ if st.button("🚀 Generate Audio (MP3)"):
             if os.path.exists(output_audio):
                 os.remove(output_audio)
             try:
+                # 1. फ्री न्यूरल इंजन
                 if engine_choice.startswith("🆓"):
                     voice_code, base_speed = free_voices[selected_voice]
                     rate_str = f"{base_speed + speed_adjust:+d}%"
                     asyncio.run(generate_edge_clean(text_input, voice_code, rate_str, output_audio))
+                # 2. Gemini इंजन
                 elif engine_choice.startswith("✨"):
                     client = genai.Client(api_key=api_key)
                     prompt = f"इस टेक्स्ट को {gemini_tone} के अंदाज़ में सुधारें: {text_input}"
-                    response = client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
+                    res = client.models.generate_content(model="gemini-3.6-flash", contents=prompt)
                     target_code = "hi-IN-MadhurNeural" if "Madhur" in selected_voice else "hi-IN-SwaraNeural"
-                    asyncio.run(generate_edge_clean(response.text, target_code, "+0%", output_audio))
+                    asyncio.run(generate_edge_clean(res.text, target_code, "+0%", output_audio))
+                # 3. ElevenLabs इंजन
                 else:
                     v_id = elevenlabs_voices[selected_voice]
                     url = f"https://api.elevenlabs.io/v1/text-to-speech/{v_id}"
