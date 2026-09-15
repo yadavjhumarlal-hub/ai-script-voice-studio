@@ -1,5 +1,2 @@
 streamlit
 edge-tts
-requests
-google-genai
-yt-dlp
